@@ -1,0 +1,32 @@
+type Market @entity(immutable: false) {
+  id: ID!
+  question: String!
+  endTime: BigInt!
+  resolved: Boolean!
+  outcome: BigInt!
+  totalVolume: BigInt!
+}
+
+type SharePurchase @entity(immutable: true) {
+  id: ID!
+  market: Market!
+  buyer: Bytes!
+  amount: BigInt!
+  isYes: Boolean!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type Resolution @entity(immutable: true) {
+  id: ID!
+  market: Market!
+  outcome: BigInt!
+  blockNumber: BigInt!
+}
+
+type FeeWithdrawal @entity(immutable: true) {
+  id: ID!
+  to: Bytes!
+  amount: BigInt!
+  blockNumber: BigInt!
+}

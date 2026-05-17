@@ -1,0 +1,33 @@
+specVersion: 0.0.6
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: PredictionMarket
+    network: base-sepolia
+    source:
+      address: "0x0000000000000000000000000000000000000000"
+      abi: PredictionMarket
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Market
+        - SharePurchase
+        - Resolution
+        - FeeWithdrawal
+      abis:
+        - name: PredictionMarket
+          file: ../out/PredictionMarket.sol/PredictionMarket.json
+      eventHandlers:
+        - event: MarketCreated(indexed uint256,string,uint256)
+          handler: handleMarketCreated
+        - event: SharesBought(indexed uint256,indexed address,uint256,bool)
+          handler: handleSharesBought
+        - event: MarketResolved(indexed uint256,uint256)
+          handler: handleMarketResolved
+        - event: FeesWithdrawn(indexed address,uint256)
+          handler: handleFeesWithdrawn
+      file: ./src/mapping.ts

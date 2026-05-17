@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prediction Market dApp</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f6f8fb; color: #17202a; }
+    main { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    section { margin-top: 24px; padding: 18px; background: white; border: 1px solid #d8dee8; border-radius: 8px; }
+    button { border: 0; background: #165dff; color: white; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+    button.secondary { background: #2d3748; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; margin: 6px 0 12px; border: 1px solid #cbd5e1; border-radius: 6px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .muted { color: #5c6b7a; }
+    pre { white-space: pre-wrap; background: #101828; color: #e8edf5; padding: 12px; border-radius: 8px; min-height: 72px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Prediction Market</h1>
+        <p class="muted">Defence dApp for wallet connection, reads, writes, governance, and subgraph demo.</p>
+      </div>
+      <button id="connect">Connect Wallet</button>
+    </header>
+
+    <section>
+      <h2>Addresses</h2>
+      <div class="grid">
+        <label>Market proxy<input id="market" placeholder="0x..." /></label>
+        <label>Governance token<input id="token" placeholder="0x..." /></label>
+        <label>Governor<input id="governor" placeholder="0x..." /></label>
+        <label>Subgraph URL<input id="subgraph" placeholder="https://api.studio.thegraph.com/query/..." /></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Protocol Reads</h2>
+      <button id="read">Read State</button>
+      <pre id="readOut">Connect wallet and enter addresses.</pre>
+    </section>
+
+    <section>
+      <h2>Transactions</h2>
+      <div class="grid">
+        <button id="create">Create Market</button>
+        <button id="delegate" class="secondary">Delegate Votes To Self</button>
+        <button id="vote" class="secondary">Vote For Proposal #</button>
+      </div>
+      <input id="proposalId" placeholder="proposal id for vote" />
+      <pre id="txOut">No transaction sent.</pre>
+    </section>
+
+    <section>
+      <h2>Subgraph</h2>
+      <button id="queryGraph">Load Indexed Markets</button>
+      <pre id="graphOut">No query yet.</pre>
+    </section>
+  </main>
+
+  <script type="module">
+    import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+
+    const marketAbi = [
+      "function marketCount() view returns (uint256)",
+      "function feeBps() view returns (uint256)",
+      "function createMarket(string,uint256) returns (uint256)"
+    ];
+    const tokenAbi = [
+      "function balanceOf(address) view returns (uint256)",
+      "function delegates(address) view returns (address)",
+      "function getVotes(address) view returns (uint256)",
+      "function delegate(address)"
+    ];
+    const governorAbi = ["function castVote(uint256,uint8) returns (uint256)"];
+
+    let provider, signer, account;
+    const $ = (id) => document.getElementById(id);
+
+    $("connect").onclick = async () => {
+      if (!window.ethereum) return alert("MetaMask is required");
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      account = await signer.getAddress();
+      $("connect").textContent = account.slice(0, 6) + "..." + account.slice(-4);
+    };
+
+    $("read").onclick = async () => {
+      try {
+        const market = new ethers.Contract($("market").value, marketAbi, provider);
+        const token = new ethers.Contract($("token").value, tokenAbi, provider);
+        const [count, fee, balance, votes, delegate] = await Promise.all([
+          market.marketCount(),
+          market.feeBps(),
+          token.balanceOf(account),
+          token.getVotes(account),
+          token.delegates(account)
+        ]);
+        $("readOut").textContent = JSON.stringify({ account, marketCount: count.toString(), feeBps: fee.toString(), balance: balance.toString(), votes: votes.toString(), delegate }, null, 2);
+      } catch (err) {
+        $("readOut").textContent = err.shortMessage || err.message;
+      }
+    };
+
+    $("create").onclick = async () => {
+      try {
+        const market = new ethers.Contract($("market").value, marketAbi, signer);
+        const tx = await market.createMarket("Will ETH close above 5000 USD?", 86400);
+        $("txOut").textContent = "Submitted: " + tx.hash;
+        await tx.wait();
+        $("txOut").textContent = "Confirmed: " + tx.hash;
+      } catch (err) {
+        $("txOut").textContent = err.shortMessage || err.message;
+      }
+    };
+
+    $("delegate").onclick = async () => {
+      try {
+        const token = new ethers.Contract($("token").value, tokenAbi, signer);
+        const tx = await token.delegate(account);
+        $("txOut").textContent = "Submitted: " + tx.hash;
+        await tx.wait();
+        $("txOut").textContent = "Delegated: " + tx.hash;
+      } catch (err) {
+        $("txOut").textContent = err.shortMessage || err.message;
+      }
+    };
+
+    $("vote").onclick = async () => {
+      try {
+        const governor = new ethers.Contract($("governor").value, governorAbi, signer);
+        const tx = await governor.castVote($("proposalId").value, 1);
+        $("txOut").textContent = "Submitted: " + tx.hash;
+        await tx.wait();
+        $("txOut").textContent = "Voted: " + tx.hash;
+      } catch (err) {
+        $("txOut").textContent = err.shortMessage || err.message;
+      }
+    };
+
+    $("queryGraph").onclick = async () => {
+      try {
+        const res = await fetch($("subgraph").value, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ query: "{ markets(first: 5) { id question endTime resolved outcome } }" })
+        });
+        $("graphOut").textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (err) {
+        $("graphOut").textContent = err.message;
+      }
+    };
+  </script>
+</body>
+</html>
